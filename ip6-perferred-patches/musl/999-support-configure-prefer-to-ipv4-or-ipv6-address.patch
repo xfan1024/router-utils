@@ -1,0 +1,79 @@
+From e66ffbebd54c33bf316d112cb342ccebd96916e3 Mon Sep 17 00:00:00 2001
+From: xiaofan <xfan1024@live.com>
+Date: Wed, 3 Aug 2022 08:54:20 +0000
+Subject: [PATCH] support configure prefer to ipv4 or ipv6 address
+
+Signed-off-by: xiaofan <xfan1024@live.com>
+---
+ src/network/lookup_name.c | 52 ++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 51 insertions(+), 1 deletion(-)
+
+diff --git a/src/network/lookup_name.c b/src/network/lookup_name.c
+index c93263a..432eb76 100644
+--- a/src/network/lookup_name.c
++++ b/src/network/lookup_name.c
+@@ -278,10 +278,60 @@ static int prefixmatch(const struct in6_addr *s, const struct in6_addr *d)
+ #define DAS_PREFIX_SHIFT        8
+ #define DAS_ORDER_SHIFT         0
+ 
++static int read_family_preferred(void)
++{
++	static int family_preferred = -1;
++	char preferred[8] = {0}, *p = preferred;
++	int f;
++	
++	if (family_preferred >= 0)
++		return family_preferred;
++
++	f = open("/etc/family_preferred", O_RDONLY);
++	if (f < 0)
++		goto err;
++	if (read(f, preferred, sizeof(preferred)-1) <= 0)
++		goto err_close;
++	close(f);
++	while (*p) {
++		if ('A' <= *p || *p <= 'Z') {
++			// to lowercase
++			*p = *p - 'A' + 'a';
++		} else if (*p == ' ' || *p == '\n' || *p == '\t') {
++			// allow space char after content
++			*p = '\0';
++			break;
++		}
++		++p;
++	}
++	if (strcmp(preferred, "inet") == 0 || strcmp(preferred, "inet4") == 0 ||
++		strcmp(preferred, "ip4") == 0 || strcmp(preferred, "ipv4") == 0) {
++		family_preferred = AF_INET;
++	} else if (strcmp(preferred, "inet6") == 0 ||
++		strcmp(preferred, "ip6") == 0 || strcmp(preferred, "ipv6") == 0) {
++		family_preferred = AF_INET6;
++	} else {
++		family_preferred = 0;
++	}
++	return family_preferred;
++
++err_close:
++	close(f);
++err:
++	family_preferred = 0;
++	return 0;
++}
++
+ static int addrcmp(const void *_a, const void *_b)
+ {
++	int preferred;
+ 	const struct address *a = _a, *b = _b;
+-	return b->sortkey - a->sortkey;
++
++	if (a->family == b->family ||
++		(preferred = read_family_preferred()) == 0 ||
++		(a->family != preferred && b->family != preferred))
++		return b->sortkey - a->sortkey;
++	return (a->family == preferred) ? -1 : 1;
+ }
+ 
+ int __lookup_name(struct address buf[static MAXADDRS], char canon[static 256], const char *name, int family, int flags)
+-- 
+2.25.1
+

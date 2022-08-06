@@ -1,0 +1,35 @@
+From 8a5d6052520a0670bb6b40f858b9f4681763c6ea Mon Sep 17 00:00:00 2001
+From: xiaofan <xfan1024@live.com>
+Date: Wed, 3 Aug 2022 12:29:22 +0000
+Subject: [PATCH] use first address in result of getaddrinfo
+
+Signed-off-by: xiaofan <xfan1024@live.com>
+---
+ usock.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/usock.c b/usock.c
+index 0ce5390..83e609d 100644
+--- a/usock.c
++++ b/usock.c
+@@ -166,10 +166,15 @@ int usock_inet_timeout(int type, const char *host, const char *service,
+ 	}
+ 
+ 	for (rp = result; rp != NULL; rp = rp->ai_next) {
+-		if (rp->ai_family == AF_INET6 && !rp_v6)
++		if (rp->ai_family == AF_INET6 && !rp_v6) {
+ 			rp_v6 = rp;
+-		if (rp->ai_family == AF_INET && !rp_v4)
++			break;
++		}
++
++		if (rp->ai_family == AF_INET && !rp_v4) {
+ 			rp_v4 = rp;
++			break;
++		}
+ 	}
+ 
+ 	if (!rp_v6 && !rp_v4)
+-- 
+2.25.1
+
