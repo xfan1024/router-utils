@@ -1,27 +1,46 @@
-From e66ffbebd54c33bf316d112cb342ccebd96916e3 Mon Sep 17 00:00:00 2001
 From: xiaofan <xfan1024@live.com>
-Date: Wed, 3 Aug 2022 08:54:20 +0000
+Date: Thu, 29 Dec 2022 13:23:22 +0000
 Subject: [PATCH] support configure prefer to ipv4 or ipv6 address
 
 Signed-off-by: xiaofan <xfan1024@live.com>
 ---
- src/network/lookup_name.c | 52 ++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 51 insertions(+), 1 deletion(-)
+ src/network/lookup_name.c | 83 ++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 82 insertions(+), 1 deletion(-)
 
 diff --git a/src/network/lookup_name.c b/src/network/lookup_name.c
-index c93263a..432eb76 100644
 --- a/src/network/lookup_name.c
 +++ b/src/network/lookup_name.c
-@@ -278,10 +278,60 @@ static int prefixmatch(const struct in6_addr *s, const struct in6_addr *d)
+@@ -278,10 +278,83 @@ static int prefixmatch(const struct in6_addr *s, const struct in6_addr *d)
  #define DAS_PREFIX_SHIFT        8
  #define DAS_ORDER_SHIFT         0
  
++static int lookup_name_debug() {
++	static int debug = -1;
++	if (debug < 0) {
++		const char *str = getenv("lookup_debug");
++		debug = str && str[0] && !(str[0] == '0' && !str[1]);
++	}
++	return debug;
++}
++
++static const char *family_string(int family) {
++	switch (family) {
++		case AF_INET:
++			return "AF_INET";
++		case AF_INET6:
++			return "AF_INET6";
++		case AF_UNSPEC:
++			return "AF_UNSPEC";
++	}
++	return "OTHER";
++}
++
 +static int read_family_preferred(void)
 +{
 +	static int family_preferred = -1;
 +	char preferred[8] = {0}, *p = preferred;
 +	int f;
-+	
++
 +	if (family_preferred >= 0)
 +		return family_preferred;
 +
@@ -32,10 +51,8 @@ index c93263a..432eb76 100644
 +		goto err_close;
 +	close(f);
 +	while (*p) {
-+		if ('A' <= *p || *p <= 'Z') {
-+			// to lowercase
-+			*p = *p - 'A' + 'a';
-+		} else if (*p == ' ' || *p == '\n' || *p == '\t') {
++		*p = tolower(*p);
++		if (isspace(*p)) {
 +			// allow space char after content
 +			*p = '\0';
 +			break;
@@ -50,6 +67,10 @@ index c93263a..432eb76 100644
 +		family_preferred = AF_INET6;
 +	} else {
 +		family_preferred = 0;
++	}
++	if (lookup_name_debug()) {
++		fprintf(stderr, "[lookup_debug] set family_preferred: %s, raw string: %s\n",
++						family_string(family_preferred), preferred);
 +	}
 +	return family_preferred;
 +
@@ -74,6 +95,21 @@ index c93263a..432eb76 100644
  }
  
  int __lookup_name(struct address buf[static MAXADDRS], char canon[static 256], const char *name, int family, int flags)
+@@ -409,6 +482,14 @@ int __lookup_name(struct address buf[static MAXADDRS], char canon[static 256], c
+ 		buf[i].sortkey = key;
+ 	}
+ 	qsort(buf, cnt, sizeof *buf, addrcmp);
++	if (lookup_name_debug()) {
++		int preferred = read_family_preferred();
++		const char *first = "notfound";
++		if (cnt)
++			first = family_string(buf[0].family);
++		fprintf(stderr, "[lookup_debug] name: %s, require: %s, preferred: %s, first: %s\n",
++						name, family_string(family), family_string(preferred), first);
++	}
+ 
+ 	pthread_setcancelstate(cs, 0);
+ 
 -- 
 2.25.1
 
